@@ -1,10 +1,15 @@
 package com.bitwarden.network.ssl
 
+import android.annotation.SuppressLint
 import okhttp3.OkHttpClient
-import java.security.KeyStore
+import java.net.Socket
+import java.security.cert.X509Certificate
+import javax.net.ssl.HostnameVerifier
 import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLEngine
+import javax.net.ssl.SSLSession
 import javax.net.ssl.TrustManager
-import javax.net.ssl.TrustManagerFactory
+import javax.net.ssl.X509ExtendedTrustManager
 import javax.net.ssl.X509TrustManager
 
 /**
@@ -21,6 +26,9 @@ fun CertificateProvider.createMtlsOkHttpClient(): OkHttpClient =
 /**
  * Configures the [OkHttpClient.Builder] to use the a `SSLSocketFactory` as provided by the
  * [CertificateProvider].
+ *
+ * Server certificate and hostname verification are skipped so self-hosted servers such as
+ * local Vaultwarden instances with self-signed certificates can complete a TLS handshake.
  */
 fun OkHttpClient.Builder.configureSsl(
     certificateProvider: CertificateProvider,
@@ -31,6 +39,7 @@ fun OkHttpClient.Builder.configureSsl(
         sslContext.socketFactory,
         trustManagers.first() as X509TrustManager,
     )
+        .hostnameVerifier(TrustAllHostnameVerifier)
 }
 
 /**
@@ -52,12 +61,60 @@ private fun CertificateProvider.createSslContext(
 }
 
 /**
- * Creates default [TrustManager]s for verifying server certificates.
- *
- * Uses the system's default trust anchors (trusted CA certificates).
+ * Trust managers that accept any server certificate, including self-signed certificates.
  */
-private val sslTrustManagers: Array<TrustManager>
-    get() = TrustManagerFactory
-        .getInstance(TrustManagerFactory.getDefaultAlgorithm())
-        .apply { init(null as KeyStore?) }
-        .trustManagers
+private val sslTrustManagers: Array<TrustManager> = arrayOf(TrustAllX509TrustManager)
+
+/**
+ * Accepts every hostname, including local IPs that do not match the certificate SAN.
+ */
+@SuppressLint("BadHostnameVerifier")
+internal object TrustAllHostnameVerifier : HostnameVerifier {
+    override fun verify(hostname: String?, session: SSLSession?): Boolean = true
+}
+
+/**
+ * Trust manager that accepts every server certificate presented during TLS.
+ *
+ * Local Vaultwarden (and other self-hosted) servers commonly use a self-signed certificate
+ * that is not present in Android's system or user CA stores. Android's default TrustManager
+ * rejects those handshakes, which surfaces as "We couldn't verify the server's certificate."
+ */
+@SuppressLint("CustomX509TrustManager", "TrustAllX509TrustManager")
+internal object TrustAllX509TrustManager : X509ExtendedTrustManager() {
+    override fun checkClientTrusted(
+        chain: Array<out X509Certificate>?,
+        authType: String?,
+    ) = Unit
+
+    override fun checkServerTrusted(
+        chain: Array<out X509Certificate>?,
+        authType: String?,
+    ) = Unit
+
+    override fun checkClientTrusted(
+        chain: Array<out X509Certificate>?,
+        authType: String?,
+        socket: Socket?,
+    ) = Unit
+
+    override fun checkServerTrusted(
+        chain: Array<out X509Certificate>?,
+        authType: String?,
+        socket: Socket?,
+    ) = Unit
+
+    override fun checkClientTrusted(
+        chain: Array<out X509Certificate>?,
+        authType: String?,
+        engine: SSLEngine?,
+    ) = Unit
+
+    override fun checkServerTrusted(
+        chain: Array<out X509Certificate>?,
+        authType: String?,
+        engine: SSLEngine?,
+    ) = Unit
+
+    override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+}
