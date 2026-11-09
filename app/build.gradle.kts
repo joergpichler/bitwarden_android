@@ -113,8 +113,8 @@ configure<ApplicationExtension> {
         create("beta") {
             applicationIdSuffix = ".beta"
             isDebuggable = false
-            isMinifyEnabled = false
-            isShrinkResources = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             matchingFallbacks += listOf("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -126,9 +126,8 @@ configure<ApplicationExtension> {
         }
         release {
             isDebuggable = false
-            // R8 minify needs several GB and was killing the Jenkins Gradle daemon.
-            isMinifyEnabled = false
-            isShrinkResources = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
