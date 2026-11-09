@@ -150,6 +150,12 @@ configure<ApplicationExtension> {
 }
 
 androidComponents {
+    beforeVariants { variantBuilder ->
+        // Authenticator release needs google-services.json. Skip it for local CI APK builds.
+        if (variantBuilder.buildType != "debug") {
+            variantBuilder.enable = false
+        }
+    }
     onVariants { appVariant ->
         val bundlesDir = "${layout.buildDirectory.get()}/outputs/bundle"
         val applicationId = appVariant.applicationId.get()

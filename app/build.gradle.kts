@@ -176,6 +176,14 @@ configure<ApplicationExtension> {
 }
 
 androidComponents {
+    beforeVariants { variantBuilder ->
+        // Play Store variants need google-services.json. Local CI has none, so only F-Droid
+        // non-debug variants stay enabled and `assembleRelease` / `bundleRelease` succeed.
+        val isStandard = variantBuilder.productFlavors.any { it.second == "standard" }
+        if (isStandard && variantBuilder.buildType != "debug") {
+            variantBuilder.enable = false
+        }
+    }
     onVariants { appVariant ->
         val bundlesDir = "${layout.buildDirectory.get()}/outputs/bundle"
         val applicationId = appVariant.applicationId.get()
@@ -323,6 +331,41 @@ afterEvaluate {
     fdroidTasksToDisable
         .filter { it.name.contains("Fdroid") }
         .forEach { it.enabled = false }
+
+    // Pipeline looks for unsigned APKs under outputs/apk/release and AABs under
+    // outputs/bundle/release. F-Droid artifacts are generated under flavor paths.
+    tasks.named("assembleFdroidRelease") {
+        doLast {
+            copyNewestFile(
+                sourceDir = layout.buildDirectory.get().dir("outputs/apk/fdroid/release").asFile,
+                destination = layout.buildDirectory.get()
+                    .file("outputs/apk/release/com.x8bit.bitwarden-unsigned.apk")
+                    .asFile,
+                extension = "apk",
+            )
+        }
+    }
+    tasks.named("bundleFdroidRelease") {
+        doLast {
+            copyNewestFile(
+                sourceDir = layout.buildDirectory.get().dir("outputs/bundle/fdroidRelease").asFile,
+                destination = layout.buildDirectory.get()
+                    .file("outputs/bundle/release/com.x8bit.bitwarden.aab")
+                    .asFile,
+                extension = "aab",
+            )
+        }
+    }
+}
+
+private fun copyNewestFile(sourceDir: File, destination: File, extension: String) {
+    val source = sourceDir
+        .takeIf { it.isDirectory }
+        ?.listFiles { file -> file.isFile && file.extension == extension }
+        ?.maxByOrNull { it.lastModified() }
+        ?: return
+    destination.parentFile.mkdirs()
+    source.copyTo(destination, overwrite = true)
 }
 
 private fun renameFile(path: String, newName: String) {
