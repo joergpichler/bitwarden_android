@@ -64,6 +64,12 @@ configure<ApplicationExtension> {
 }
 
 androidComponents {
+    beforeVariants { variantBuilder ->
+        // Testharness is not shipped. Skip release so assembleRelease only builds Bitwarden.
+        if (variantBuilder.buildType != "debug") {
+            variantBuilder.enable = false
+        }
+    }
     onVariants { appVariant ->
         appVariant
             .outputs

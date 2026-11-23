@@ -196,6 +196,9 @@ subprojects {
     }
     tasks.withType<JavaCompile>().configureEach {
         options.isFork = true
+        // Without a cap the forked javac picks 1/4 of physical RAM as its max heap, on top of
+        // the Gradle daemon. 1g is plenty for the Hilt-generated Java sources.
+        options.forkOptions.memoryMaximumSize = "1g"
     }
     tasks.withType<Test>().configureEach {
         useJUnitPlatform()
@@ -208,6 +211,23 @@ subprojects {
             // Explicitly setting the user Country and Language because tests assume en-US
             "-Duser.country=US" +
             "-Duser.language=en"
+    }
+}
+
+// The local CI pipeline runs `./gradlew clean assembleRelease bundleRelease` for every repository.
+// With `localCi.apkOnly=true`, drop everything that does not feed the F-Droid release APK: library
+// AARs (including the unused `standard` flavor of :cxf) and the app bundle. Works like `-x`, so the
+// excluded tasks' dependencies are skipped too unless the APK needs them.
+if (providers.gradleProperty("localCi.apkOnly").orNull.toBoolean()) {
+    gradle.projectsEvaluated {
+        val excludedTasks = allprojects
+            .filter { it.path != ":app" }
+            .flatMap { project ->
+                listOf("assembleRelease", "bundleRelease")
+                    .filter { it in project.tasks.names }
+                    .map { "${project.path}:$it" }
+            } + ":app:bundleFdroidRelease"
+        gradle.startParameter.excludedTaskNames += excludedTasks
     }
 }
 
